@@ -1,0 +1,9 @@
+[package]
+name = "plywood"
+version = "0.1.0"
+authors = ["Dan Elkouby <streetwalkermc@gmail.com>"]
+
+[dependencies]
+log = "0.4"
+simplelog = "0.5"
+xcb = "0.8"
