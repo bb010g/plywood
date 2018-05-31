@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::collections::{VecDeque, HashMap};
+use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 
 use xcb;
@@ -24,7 +24,9 @@ impl Compositor {
         let (conn, screen_num) = xcb::Connection::connect(None)?;
         let root = {
             let setup = conn.get_setup();
-            let screen = setup.roots().nth(screen_num as usize)
+            let screen = setup
+                .roots()
+                .nth(screen_num as usize)
                 .ok_or(format!("Couldn't find screen {}", screen_num))?;
             screen.root()
         };
@@ -40,7 +42,8 @@ impl Compositor {
             c.root,
             xcb::EVENT_MASK_STRUCTURE_NOTIFY
                 | xcb::EVENT_MASK_SUBSTRUCTURE_NOTIFY
-                | xcb::EVENT_MASK_PROPERTY_CHANGE);
+                | xcb::EVENT_MASK_PROPERTY_CHANGE,
+        );
         c.conn.flush();
 
         let tree = xcb::query_tree(&c.conn, c.root).get_reply()?;
@@ -68,40 +71,40 @@ impl Compositor {
                     // TODO track damage events
                     xcb::CIRCULATE_NOTIFY => {
                         debug!("CIRCULATE_NOTIFY");
-                    },
+                    }
                     xcb::CONFIGURE_NOTIFY => {
                         debug!("CONFIGURE_NOTIFY");
-                    },
+                    }
                     xcb::CREATE_NOTIFY => {
                         let event = unsafe { xcb::cast_event::<xcb::CreateNotifyEvent>(&event) };
                         self.add_window(event.window());
-                    },
+                    }
                     xcb::DESTROY_NOTIFY => {
                         debug!("DESTROY_NOTIFY");
-                    },
+                    }
                     xcb::GRAVITY_NOTIFY => {
                         debug!("GRAVITY_NOTIFY");
-                    },
+                    }
                     xcb::MAP_NOTIFY => {
                         let event = unsafe { xcb::cast_event::<xcb::MapNotifyEvent>(&event) };
                         debug!("Window {:x} mapped", event.window());
-                    },
+                    }
                     xcb::REPARENT_NOTIFY => {
                         debug!("REPARENT_NOTIFY");
-                    },
+                    }
                     xcb::UNMAP_NOTIFY => {
                         let event = unsafe { xcb::cast_event::<xcb::UnmapNotifyEvent>(&event) };
                         debug!("Window {:x} unmapped", event.window());
-                    },
+                    }
                     xcb::PROPERTY_NOTIFY => {
                         debug!("PROPERTY_NOTIFY");
-                    },
+                    }
                     xcb::CLIENT_MESSAGE => {
                         debug!("CLIENT_MESSAGE");
                     }
                     t => {
                         warn!("Unhandled event {}", t);
-                    },
+                    }
                 }
             } else {
                 break;

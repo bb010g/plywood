@@ -12,9 +12,8 @@ extern crate xcb;
 mod state;
 
 fn main() -> Result<(), Box<Error>> {
-    let _ = simplelog::TermLogger::init(
-        simplelog::LevelFilter::Trace,
-        simplelog::Config::default());
+    let _ =
+        simplelog::TermLogger::init(simplelog::LevelFilter::Trace, simplelog::Config::default());
 
     let comp = state::Compositor::new()?;
     comp.event_loop();
