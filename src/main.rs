@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<Error>> {
     let _ =
         simplelog::TermLogger::init(simplelog::LevelFilter::Trace, simplelog::Config::default());
 
-    let comp = state::Compositor::new()?;
+    let mut comp = state::Compositor::new()?;
     comp.event_loop();
 
     Ok(())
