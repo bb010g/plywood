@@ -7,9 +7,23 @@ use std::error::Error;
 
 use xcb;
 
+macro_rules! xcb_join {
+    ( $( $name:ident: $req:expr )* ) => {{
+        $( let $name = $req; )*
+        $( let $name = $name.get_reply(); )*
+        $( let $name = $name.ok()?; )*
+        ( $( $name, )* )
+    }}
+}
+
 const INITIAL_CAPACITY: usize = 256;
 
 struct Window {
+    mapped: bool,
+    x: i16, y: i16,
+    w: u16, h: u16,
+    border: u16,
+    needs_rebind: bool,
 }
 
 pub struct Compositor {
@@ -17,6 +31,26 @@ pub struct Compositor {
     root: xcb::Window,
     windows: HashMap<xcb::Window, Window>,
     stack: VecDeque<xcb::Window>,
+}
+
+impl Window {
+    fn from_id(conn: &xcb::Connection, id: xcb::Window) -> Option<Window> {
+        let (attrs, geometry) = xcb_join! {
+            attrs: xcb::get_window_attributes(conn, id)
+            geometry: xcb::get_geometry(conn, id)
+        };
+        if attrs.map_state() == xcb::MAP_STATE_UNVIEWABLE as u8 {
+            // The window was reparented
+            return None;
+        }
+        Some(Window {
+            mapped: attrs.map_state() == xcb::MAP_STATE_VIEWABLE as u8,
+            x: geometry.x(), y: geometry.y(),
+            w: geometry.width(), h: geometry.height(),
+            border: geometry.border_width(),
+            needs_rebind: true,
+        })
+    }
 }
 
 impl Compositor {
@@ -59,16 +93,16 @@ impl Compositor {
         xcb::change_window_attributes(&self.conn, win, &attrs);
     }
 
-    fn add_window(&mut self, win: xcb::Window) {
-        debug!("Tracking window {}", win);
-        if self.windows.contains_key(&win) {
-            warn!("Attempted to add known window {}", win);
+    fn add_window(&mut self, id: xcb::Window) {
+        if self.windows.contains_key(&id) {
+            warn!("Attempted to add known window {}", id);
             return;
         }
-        self.windows.insert(win, Window {
-            // TODO initialize this
-        });
-        self.stack.push_back(win);
+        if let Some(win) = Window::from_id(&self.conn, id) {
+            debug!("Tracking window {}", id);
+            self.windows.insert(id, win);
+            self.stack.push_back(id);
+        }
     }
 
     fn remove_window(&mut self, win: xcb::Window) {
@@ -87,12 +121,6 @@ impl Compositor {
             if let Some(event) = self.conn.wait_for_event() {
                 match event.response_type() & !0x80 {
                     // TODO track damage events
-                    xcb::CIRCULATE_NOTIFY => {
-                        debug!("CIRCULATE_NOTIFY");
-                    }
-                    xcb::CONFIGURE_NOTIFY => {
-                        debug!("CONFIGURE_NOTIFY");
-                    }
                     xcb::CREATE_NOTIFY => {
                         let event = unsafe { xcb::cast_event::<xcb::CreateNotifyEvent>(&event) };
                         self.add_window(event.window());
@@ -101,26 +129,35 @@ impl Compositor {
                         let event = unsafe { xcb::cast_event::<xcb::DestroyNotifyEvent>(&event) };
                         self.remove_window(event.window());
                     }
+                    xcb::REPARENT_NOTIFY => {
+                        let event = unsafe { xcb::cast_event::<xcb::ReparentNotifyEvent>(&event) };
+                        if event.parent() == self.root {
+                            self.add_window(event.window());
+                        } else {
+                            self.remove_window(event.window());
+                        }
+                    }
+                    xcb::CONFIGURE_NOTIFY => {
+                        debug!("CONFIGURE_NOTIFY");
+                    }
+                    xcb::CIRCULATE_NOTIFY => {
+                        debug!("CIRCULATE_NOTIFY");
+                    }
                     xcb::GRAVITY_NOTIFY => {
                         debug!("GRAVITY_NOTIFY");
                     }
                     xcb::MAP_NOTIFY => {
                         let event = unsafe { xcb::cast_event::<xcb::MapNotifyEvent>(&event) };
                         debug!("Mapped window {}", event.window());
-                    }
-                    xcb::REPARENT_NOTIFY => {
-                        let event = unsafe { xcb::cast_event::<xcb::ReparentNotifyEvent>(&event) };
-                        let win = event.window();
-                        let parent = event.parent();
-                        if parent == self.root {
-                            self.add_window(win);
-                        } else {
-                            self.remove_window(win);
-                        }
+                        let win = self.windows.get_mut(&event.window()).unwrap();
+                        (*win).mapped = true;
+                        (*win).needs_rebind = true;
                     }
                     xcb::UNMAP_NOTIFY => {
                         let event = unsafe { xcb::cast_event::<xcb::UnmapNotifyEvent>(&event) };
                         debug!("Unmapped window {}", event.window());
+                        let win = self.windows.get_mut(&event.window()).unwrap();
+                        (*win).mapped = false;
                     }
                     xcb::PROPERTY_NOTIFY => {
                         debug!("PROPERTY_NOTIFY");
