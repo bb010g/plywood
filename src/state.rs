@@ -35,6 +35,8 @@ pub struct Compositor {
 
 impl Window {
     fn from_id(conn: &xcb::Connection, id: xcb::Window) -> Option<Window> {
+        // TODO Maybe this can be made fully asynchronous for higher performance
+        // Needs careful consideration with regards to order of event and reply handling
         let (attrs, geometry) = xcb_join! {
             attrs: xcb::get_window_attributes(conn, id)
             geometry: xcb::get_geometry(conn, id)
