@@ -8,7 +8,7 @@ use std::error::Error;
 use xcb;
 
 macro_rules! xcb_join {
-    ( $( $name:ident: $req:expr )* ) => {{
+    ( $( $name:ident => $req:expr )* ) => {{
         $( let $name = $req; )*
         $( let $name = $name.get_reply(); )*
         $( let $name = $name.ok()?; )*
@@ -38,8 +38,8 @@ impl Window {
         // TODO Maybe this can be made fully asynchronous for higher performance
         // Needs careful consideration with regards to order of event and reply handling
         let (attrs, geometry) = xcb_join! {
-            attrs: xcb::get_window_attributes(conn, id)
-            geometry: xcb::get_geometry(conn, id)
+            attrs => xcb::get_window_attributes(conn, id)
+            geometry => xcb::get_geometry(conn, id)
         };
         if attrs.map_state() == xcb::MAP_STATE_UNVIEWABLE as u8 {
             // The window was reparented
