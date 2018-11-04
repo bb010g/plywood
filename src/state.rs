@@ -8,20 +8,17 @@ use std::error::Error;
 use xcb;
 
 macro_rules! xcb_join {
-    ( $( $name:ident => $req:expr )* ) => {{
-        $( let $name = $req; )*
-        $( let $name = $name.get_reply(); )*
-        $( let $name = $name.ok()?; )*
-        ( $( $name, )* )
-    }}
+    ($($req:tt)*) => (tuple_lockstep!(($($req)*), (|r| r.get_reply(), |r| r.ok()?)));
 }
 
 const INITIAL_CAPACITY: usize = 256;
 
 struct Window {
     mapped: bool,
-    x: i16, y: i16,
-    w: u16, h: u16,
+    x: i16,
+    y: i16,
+    w: u16,
+    h: u16,
     border: u16,
     needs_rebind: bool,
 }
@@ -37,18 +34,20 @@ impl Window {
     fn from_id(conn: &xcb::Connection, id: xcb::Window) -> Option<Window> {
         // TODO Maybe this can be made fully asynchronous for higher performance
         // Needs careful consideration with regards to order of event and reply handling
-        let (attrs, geometry) = xcb_join! {
-            attrs => xcb::get_window_attributes(conn, id)
-            geometry => xcb::get_geometry(conn, id)
-        };
+        let (attrs, geometry) = xcb_join!(
+            xcb::get_window_attributes(conn, id),
+            xcb::get_geometry(conn, id)
+        );
         if attrs.map_state() == xcb::MAP_STATE_UNVIEWABLE as u8 {
             // The window was reparented
             return None;
         }
         Some(Window {
             mapped: attrs.map_state() == xcb::MAP_STATE_VIEWABLE as u8,
-            x: geometry.x(), y: geometry.y(),
-            w: geometry.width(), h: geometry.height(),
+            x: geometry.x(),
+            y: geometry.y(),
+            w: geometry.width(),
+            h: geometry.height(),
             border: geometry.border_width(),
             needs_rebind: true,
         })
